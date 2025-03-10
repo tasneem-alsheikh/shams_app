@@ -24,13 +24,13 @@ class _SignUpPageState extends State<SignUpPage> {
     '❤️ Heart Disease', '🧠 Strokes', '🌬️ Asthma', '😷 COPD', '🍭 Diabetes',
     '🦋 Thyroid Disorders', '⚡ Epilepsy', '🧑‍🦽 Parkinson’s Disease', '🦵 Multiple Sclerosis (MS)',
     '🌞 Lupus', '🌅 Vitiligo', '🧴 Psoriasis & Eczema', '🏥 Chronic Kidney Disease (CKD)',
-    '🤰 Pregnancy', '⚖️ Obesity'
+    '🤰 Pregnancy', '⚖️ Obesity', 'None'
   ];
 
   final List<String> medications = [
     '💧 Diuretics', '❤️ Blood Pressure & Heart Medications', '🧠 Psychiatric Medications',
     '🩸 Diabetes Medications', '⚡ Neurological Medications', '🤧 Allergy & Cold Medications',
-    '⚖️ Hormonal Medications'
+    '⚖️ Hormonal Medications', 'None'
   ];
 
   @override
