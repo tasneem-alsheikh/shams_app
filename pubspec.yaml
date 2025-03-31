@@ -1,26 +1,24 @@
 name: shams_app
-description: "Selected Topics in AI Course Project."
+description: A new Flutter project.
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.6.2
+  sdk: '>=2.18.0 <3.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-
+  geolocator: ^9.0.2
+  http: ^0.13.5
+  shared_preferences: ^2.2.0
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
-
-  # Assets section (Make sure assets/logo.jpg exists)
   assets:
     - assets/logo.jpg

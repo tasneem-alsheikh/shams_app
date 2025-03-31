@@ -1,25 +1,43 @@
 import 'package:flutter/material.dart';
-
-import 'screens/dashboard.dart'; // Import the dashboard page
+import 'screens/dashboard.dart';
 import 'screens/get_started.dart';
-import 'screens/login_page.dart'; // Import the login page file
-import 'screens/sign_up_page.dart'; // Import the sign-up page file
+import 'screens/login_page.dart';
+import 'screens/sign_up_page.dart';
+import 'screens/sign_up_part2.dart';
 
 void main() {
-  runApp(MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false, // Hides the debug banner
-      initialRoute: '/get_started', // Use initialRoute instead of home for better route management
+      debugShowCheckedModeBanner: false,
+      title: 'Shams',
+      theme: ThemeData(
+        primaryColor: const Color(0xFFD89E00),
+        scaffoldBackgroundColor: Colors.white, // Pure white
+        fontFamily: 'Roboto',
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ),
+      initialRoute: '/get_started',
       routes: {
-        '/get_started': (context) => GetStartedPage(),
-        '/login': (context) => LoginPage(),
-        '/sign_up': (context) => SignUpPage(), // Add this line to link to SignUpPage
-        '/dashboard': (context) => DashboardPage(), // Add this line for the Dashboard page
+        '/get_started': (context) => const GetStartedPage(),
+        '/login': (context) => const LoginPage(),
+        '/sign_up': (context) => const SignUpPage(),
+        '/sign_up_part2': (context) => const SignUpPart2(),
+        '/dashboard': (context) => const DashboardPage(),
       },
     );
   }
