@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "340988590654",
+    "project_id": "shams-d7d4d",
+    "storage_bucket": "shams-d7d4d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:340988590654:android:fd66d3e7f4a0f5c4442f6f",
+        "android_client_info": {
+          "package_name": "com.example.shams_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ-Q0SplBRy5h_TiXTVMDfrmRQRhxPdbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

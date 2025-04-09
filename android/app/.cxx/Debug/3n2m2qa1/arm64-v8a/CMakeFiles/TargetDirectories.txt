@@ -1,0 +1,2 @@
+C:/Users/user/OneDrive/Desktop/Resources/Selected Topics in AI/Project/shams_app/android/app/.cxx/Debug/3n2m2qa1/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/user/OneDrive/Desktop/Resources/Selected Topics in AI/Project/shams_app/android/app/.cxx/Debug/3n2m2qa1/arm64-v8a/CMakeFiles/rebuild_cache.dir
