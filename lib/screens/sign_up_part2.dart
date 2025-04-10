@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http; // For HTTP requests
+import 'dart:convert'; // For jsonEncode
 
 class SignUpPart2 extends StatefulWidget {
   const SignUpPart2({Key? key}) : super(key: key);

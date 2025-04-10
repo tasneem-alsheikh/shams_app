@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart'; // For date formatting
+import 'dart:async'; // Required for Timer
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -22,11 +23,52 @@ class _DashboardPageState extends State<DashboardPage> {
   String? userName;
   String currentDay = DateFormat('EEEE').format(DateTime.now()); // Get current day
 
+  List<String> _adviceList = [];
+  bool _isLoadingAdvice = false;
+
+  Timer? _updateTimer;
+
   @override
   void initState() {
     super.initState();
+    _startPeriodicUpdates();
     _loadUserData();
-    getLocationAndFetchWeather();
+    getLocationAndFetchWeather().then((_) => _generatePersonalizedAdvice());
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel(); // Cancel timer when widget is disposed
+    super.dispose();
+  }
+
+  void _startPeriodicUpdates() {
+    // Update immediately
+    _fetchDataAndUpdate();
+
+    // Then update every 5 minutes
+    _updateTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
+      _fetchDataAndUpdate();
+    });
+  }
+
+  Future<void> _fetchDataAndUpdate() async {
+    if (!mounted) return;
+
+    try {
+      // 1. Get fresh weather data
+      await getLocationAndFetchWeather();
+
+      // 2. Generate new advice with updated weather
+      await _generatePersonalizedAdvice();
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Update failed: ${e.toString()}')),
+        );
+      }
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -36,11 +78,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> getLocationAndFetchWeather() async {
     try {
-      Position position = await _determinePosition();
-      await fetchWeather(position.latitude, position.longitude);
-      await fetchUVIndex(position.latitude, position.longitude);
+      final position = await _determinePosition();
+      await Future.wait([
+        fetchWeather(position.latitude, position.longitude),
+        fetchUVIndex(position.latitude, position.longitude),
+      ]);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching data: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Weather update failed: ${e.toString()}')),
+        );
+      }
     }
   }
 
@@ -251,6 +299,87 @@ class _DashboardPageState extends State<DashboardPage> {
     return warnings;
   }
 
+  Future<void> _generatePersonalizedAdvice() async {
+    setState(() => _isLoadingAdvice = true);
+
+    final prefs = await SharedPreferences.getInstance();
+    // Safely get all data with fallbacks
+    final userData = {
+      'gender': prefs.getString('gender') ?? 'Not specified',
+      'age': prefs.getString('age') ?? 'Unknown',
+      'weight': prefs.getString('weight') ?? 'Unknown',
+      'illnesses': prefs.getStringList('illnesses')?.join(", ") ?? "None",
+      'medications': prefs.getStringList('medications')?.join(", ") ?? "None",
+      'currentWeather': {
+        'temperature': temperature,
+        'uvIndex': uvIndex,
+        'humidity': humidity,
+      },
+    };
+
+    final prompt = """
+  Generate 3 concise health recommendations for:
+  
+  **User Profile:**
+  - Gender: ${userData['gender']}
+  - Age: ${userData['age']}
+  - Conditions: ${userData['illnesses']}
+  - Medications: ${userData['medications']}
+  
+  **Current Weather:**
+  - Temp: ${(userData['currentWeather'] as Map)['temperature'] ?? 'N/A'}°C
+  - UV: ${(userData['currentWeather'] as Map)['uvIndex'] ?? 'N/A'}
+  - Humidity: ${(userData['currentWeather'] as Map)['humidity'] ?? 'N/A'}%
+  
+  Focus on weather interactions with health conditions.
+  Just Three simple, easy and straightforward advices. each in one or 2 lines
+  do not mention the reasoning behind the advice or explanation or why to take the advice.
+  Only mention specific advise such as the number of glasses of water to drink.
+  Do not mention the UV index, humidity, temperature, illnesses or Medications values in the advice.
+  """;
+
+    try {
+      _adviceList = await _callMistralAPI(prompt);
+    } catch (e) {
+      _adviceList = ['Failed to generate advice: $e'];
+    } finally {
+      setState(() => _isLoadingAdvice = false);
+    }
+  }
+
+  Future<List<String>> _callMistralAPI(String prompt) async {
+    try {
+      const apiKey = 'YTAPiykxZ7wbHFuCEwEyA4m2AacP7Y2p';
+      final response = await http.post(
+        Uri.parse('https://api.mistral.ai/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: jsonEncode({
+          'model': 'mistral-small',
+          'messages': [
+            {
+              'role': 'system',
+              'content': 'You are a medical assistant. Provide 3 concise bullet points.'
+            },
+            {'role': 'user', 'content': prompt}
+          ],
+        }),
+      );
+
+      final jsonResponse = jsonDecode(response.body);
+      final content = jsonResponse['choices']?[0]?['message']?['content'] as String?;
+
+      return content?.split('\n')
+          .where((line) => line.trim().isNotEmpty)
+          .toList() ??
+          ['Could not generate advice'];
+    } catch (e) {
+      return ['Error: $e'];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -352,6 +481,44 @@ class _DashboardPageState extends State<DashboardPage> {
 
               // Heat Risk Warning
               ..._buildWarnings(),
+
+              // Personalized Advice Section
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Card(
+                  elevation: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Personalized Health Advice',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFD89E00),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _isLoadingAdvice
+                              ? const CircularProgressIndicator()
+                              : _adviceList.isEmpty
+                              ? const Text('No advice generated yet')
+                              : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: _adviceList
+                                    .map((advice) => Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                      child: Text('• $advice'),
+                                    ))
+                                    .toList(),
+                              ),
+                        ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
