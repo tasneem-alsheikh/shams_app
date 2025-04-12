@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart'; // For date formatting
-import 'dart:async'; // Required for Timer
+import 'package:intl/intl.dart';
+import 'dart:async';
+import 'package:google_fonts/google_fonts.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -17,14 +18,17 @@ class _DashboardPageState extends State<DashboardPage> {
   String apiKey = "de67cbaf0d857be4d0227ac068765f68";
   String temperature = "--";
   String weatherDescription = "--";
+  String weatherIcon = "01d"; // Default to clear day; updated by API
   String city = "--";
   String humidity = "--";
   String uvIndex = "--";
   String? userName;
-  String currentDay = DateFormat('EEEE').format(DateTime.now()); // Get current day
+  String currentDay = DateFormat('EEEE').format(DateTime.now());
 
   List<String> _adviceList = [];
   bool _isLoadingAdvice = false;
+  int _waterCupsDrank = 0;
+  final int _totalWaterCups = 8;
 
   Timer? _updateTimer;
 
@@ -33,20 +37,18 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _startPeriodicUpdates();
     _loadUserData();
+    _loadWaterData();
     getLocationAndFetchWeather().then((_) => _generatePersonalizedAdvice());
   }
 
   @override
   void dispose() {
-    _updateTimer?.cancel(); // Cancel timer when widget is disposed
+    _updateTimer?.cancel();
     super.dispose();
   }
 
   void _startPeriodicUpdates() {
-    // Update immediately
     _fetchDataAndUpdate();
-
-    // Then update every 5 minutes
     _updateTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
       _fetchDataAndUpdate();
     });
@@ -54,14 +56,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _fetchDataAndUpdate() async {
     if (!mounted) return;
-
     try {
-      // 1. Get fresh weather data
       await getLocationAndFetchWeather();
-
-      // 2. Generate new advice with updated weather
       await _generatePersonalizedAdvice();
-
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -74,6 +71,27 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() => userName = prefs.getString('firstName'));
+  }
+
+  Future<void> _loadWaterData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    setState(() {
+      _waterCupsDrank = prefs.getInt('waterCups_$today') ?? 0;
+    });
+  }
+
+  Future<void> _saveWaterData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    await prefs.setInt('waterCups_$today', _waterCupsDrank);
+  }
+
+  void _updateWaterCups(int cups) {
+    setState(() {
+      _waterCupsDrank = cups;
+    });
+    _saveWaterData();
   }
 
   Future<void> getLocationAndFetchWeather() async {
@@ -113,6 +131,7 @@ class _DashboardPageState extends State<DashboardPage> {
         setState(() {
           temperature = "${data['main']['temp'].toStringAsFixed(0)}°";
           weatherDescription = data['weather'][0]['description'];
+          weatherIcon = data['weather'][0]['icon'];
           city = data['name'];
           humidity = "${data['main']['humidity']}%";
         });
@@ -143,155 +162,35 @@ class _DashboardPageState extends State<DashboardPage> {
 
     if (temp >= 30 && temp < 35) {
       warnings.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400, width: 0.9),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.warning_rounded,
-                  color: Color(0xFFD89E00),
-                  size: 60,
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Heat Risk',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Moderate',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.orange,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Stay hydrated and take breaks in shade',
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        _buildAlertBox(
+          title: 'Heat Risk',
+          level: 'Moderate',
+          levelColor: Colors.orange,
+          message: 'Stay hydrated and take breaks in shade',
+          icon: Icons.warning_rounded,
+          iconColor: const Color(0xFFD89E00),
         ),
       );
     } else if (temp >= 35 && temp < 40) {
       warnings.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400, width: 2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.warning_rounded,
-                  color: Color(0xFFD89E00),
-                  size: 30,
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Heat Risk',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'High',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Limit outdoor activity, stay hydrated',
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        _buildAlertBox(
+          title: 'Heat Risk',
+          level: 'High',
+          levelColor: Colors.red,
+          message: 'Limit outdoor activity, stay hydrated',
+          icon: Icons.warning_rounded,
+          iconColor: const Color(0xFFD89E00),
         ),
       );
     } else if (temp >= 40) {
       warnings.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400, width: 0.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.warning_rounded,
-                  color: Color(0xFFD89E00),
-                  size: 60,
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Heat Risk',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Extreme',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Avoid outdoor activity if possible',
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        _buildAlertBox(
+          title: 'Heat Risk',
+          level: 'Extreme',
+          levelColor: Colors.red,
+          message: 'Avoid outdoor activity if possible',
+          icon: Icons.warning_rounded,
+          iconColor: const Color(0xFFD89E00),
         ),
       );
     }
@@ -299,11 +198,202 @@ class _DashboardPageState extends State<DashboardPage> {
     return warnings;
   }
 
+  Widget _buildAlertBox({
+    required String title,
+    required String level,
+    required Color levelColor,
+    required String message,
+    required IconData icon,
+    required Color iconColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: iconColor,
+                size: 48,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.nunito(
+                        textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      level,
+                      style: GoogleFonts.nunito(
+                        textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: levelColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      message,
+                      style: GoogleFonts.nunito(
+                        textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaterTracker() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.water_drop,
+                    color: Color(0xFF4AA3DF),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Water Tracker',
+                    style: GoogleFonts.nunito(
+                      textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Tap a cup to track your water intake',
+                style: GoogleFonts.nunito(
+                  textStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.black54,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(
+                  _totalWaterCups,
+                      (index) => GestureDetector(
+                    onTap: () {
+                      _updateWaterCups(index + 1);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(
+                        children: [
+                          Icon(
+                            index < _waterCupsDrank ? Icons.local_drink : Icons.water_drop_outlined,
+                            color: index < _waterCupsDrank ? const Color(0xFF4AA3DF) : Colors.grey.shade400,
+                            size: 28,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${index + 1}',
+                            style: GoogleFonts.nunito(
+                              textStyle: TextStyle(
+                                fontSize: 12,
+                                color: index < _waterCupsDrank ? const Color(0xFF4AA3DF) : Colors.grey.shade400,
+                                fontWeight: index < _waterCupsDrank ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: _waterCupsDrank / _totalWaterCups,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4AA3DF)),
+                minHeight: 10,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$_waterCupsDrank of $_totalWaterCups cups',
+                    style: GoogleFonts.nunito(
+                      textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF4AA3DF),
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _waterCupsDrank = 0;
+                      });
+                      _saveWaterData();
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text(
+                      'Reset',
+                      style: GoogleFonts.nunito(
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _generatePersonalizedAdvice() async {
     setState(() => _isLoadingAdvice = true);
 
     final prefs = await SharedPreferences.getInstance();
-    // Safely get all data with fallbacks
     final userData = {
       'gender': prefs.getString('gender') ?? 'Not specified',
       'age': prefs.getString('age') ?? 'Unknown',
@@ -336,6 +426,7 @@ class _DashboardPageState extends State<DashboardPage> {
   do not mention the reasoning behind the advice or explanation or why to take the advice.
   Only mention specific advise such as the number of glasses of water to drink.
   Do not mention the UV index, humidity, temperature, illnesses or Medications values in the advice.
+  Do not include numbers or numbering at the beginning of each advice.
   """;
 
     try {
@@ -361,7 +452,7 @@ class _DashboardPageState extends State<DashboardPage> {
           'messages': [
             {
               'role': 'system',
-              'content': 'You are a medical assistant. Provide 3 concise bullet points.'
+              'content': 'You are a medical assistant. Provide 3 concise bullet points without leading asterisks, bullets, or numbers.'
             },
             {'role': 'user', 'content': prompt}
           ],
@@ -371,155 +462,330 @@ class _DashboardPageState extends State<DashboardPage> {
       final jsonResponse = jsonDecode(response.body);
       final content = jsonResponse['choices']?[0]?['message']?['content'] as String?;
 
-      return content?.split('\n')
+      // Improved cleaning: remove all numbering, bullets, and extra characters
+      if (content == null || content.isEmpty) {
+        return ['Could not generate advice'];
+      }
+
+      List<String> adviceItems = content
+          .split('\n')
           .where((line) => line.trim().isNotEmpty)
-          .toList() ??
-          ['Could not generate advice'];
+          .map((line) {
+        // Remove numbering patterns like "1. ", "1) ", etc.
+        String cleaned = line.replaceAll(RegExp(r'^\d+[\.\)\-]\s*'), '');
+        // Remove bullet points and other markers
+        cleaned = cleaned.replaceAll(RegExp(r'^[\*\•\-\s]+'), '');
+        return cleaned.trim();
+      })
+          .toList();
+
+      return adviceItems.isEmpty ? ['Could not generate advice'] : adviceItems;
     } catch (e) {
       return ['Error: $e'];
     }
   }
 
+  Future<void> _logout() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Clear user session data
+      await prefs.remove('firstName');
+      await prefs.remove('gender');
+      await prefs.remove('age');
+      await prefs.remove('weight');
+      await prefs.remove('illnesses');
+      await prefs.remove('medications');
+      // Clear auth token if you have one
+      await prefs.remove('authToken');
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Successfully logged out')),
+      );
+
+      // Navigate to login screen and clear navigation stack
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout failed: ${e.toString()}')),
+      );
+    }
+  }
+
+  // Map OpenWeatherMap icon codes to Material Icons
+  IconData _getWeatherIcon(String iconCode) {
+    switch (iconCode) {
+      case '01d': // Clear sky (day)
+        return Icons.wb_sunny;
+      case '01n': // Clear sky (night)
+        return Icons.nightlight_round;
+      case '02d': // Few clouds (day)
+        return Icons.wb_cloudy;
+      case '02n': // Few clouds (night)
+        return Icons.cloud;
+      case '03d': // Scattered clouds (day)
+      case '03n': // Scattered clouds (night)
+        return Icons.cloud;
+      case '04d': // Broken clouds (day)
+      case '04n': // Broken clouds (night)
+        return Icons.cloud_queue;
+      case '09d': // Shower rain (day)
+      case '09n': // Shower rain (night)
+        return Icons.grain;
+      case '10d': // Rain (day)
+        return Icons.beach_access; // Day rain with sun
+      case '10n': // Rain (night)
+        return Icons.nights_stay; // Night rain
+      case '11d': // Thunderstorm (day)
+      case '11n': // Thunderstorm (night)
+        return Icons.flash_on;
+      case '13d': // Snow (day)
+      case '13n': // Snow (night)
+        return Icons.ac_unit;
+      case '50d': // Mist (day)
+      case '50n': // Mist (night)
+        return Icons.foggy;
+      default:
+        return Icons.help_outline; // Unknown weather
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Logo
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center, // Center the logo
-                  children: [
-                    Image.asset('assets/logo.jpg', width: 40, height: 40),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Shams',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFD89E00),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+    // Apply Nunito font to all text widgets
+    final textTheme = Theme.of(context).textTheme;
+    final nunitoTextTheme = GoogleFonts.nunitoTextTheme(textTheme);
 
-              // Location
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 16, color: Color(0xFFD89E00)),
-                    const SizedBox(width: 4),
-                    Text(
-                      city,
-                      style: const TextStyle(fontSize: 16, color: Color(0xFFD89E00)),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Day
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Text(
-                  currentDay.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54,
-                  ),
-                ),
-              ),
-
-              // Temperature (Centered)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center, // Center the temperature
-                  children: [
-                    Text(
-                      temperature,
-                      style: const TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.brightness_1,
-                      color: Colors.red,
-                      size: 12,
-                    ),
-                  ],
-                ),
-              ),
-
-              // Humidity and UV Index
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Humidity: $humidity',
-                      style: const TextStyle(fontSize: 16, color: Colors.black54),
-                    ),
-                    Text(
-                      'UV Index: $uvIndex',
-                      style: const TextStyle(fontSize: 16, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Heat Risk Warning
-              ..._buildWarnings(),
-
-              // Personalized Advice Section
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Card(
-                  elevation: 3,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textTheme: nunitoTextTheme,
+      ),
+      child: Scaffold(
+        body: SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
-                          const Text(
-                            'Personalized Health Advice',
-                            style: TextStyle(
-                              fontSize: 20,
+                          Image.asset('assets/logo.jpg', width: 40, height: 40),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Shams',
+                            style: GoogleFonts.nunito(
+                              textStyle: Theme.of(context).textTheme.headlineMedium,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFFD89E00),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          _isLoadingAdvice
-                              ? const CircularProgressIndicator()
-                              : _adviceList.isEmpty
-                              ? const Text('No advice generated yet')
-                              : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: _adviceList
-                                    .map((advice) => Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                      child: Text('• $advice'),
-                                    ))
-                                    .toList(),
-                              ),
                         ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.logout, color: Color(0xFFD89E00)),
+                        onPressed: () {
+                          // Show confirmation dialog
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Text(
+                                'Log Out',
+                                style: GoogleFonts.nunito(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              content: Text(
+                                'Are you sure you want to log out?',
+                                style: GoogleFonts.nunito(),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: Text(
+                                    'Cancel',
+                                    style: GoogleFonts.nunito(),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    _logout();
+                                  },
+                                  child: Text(
+                                    'Log Out',
+                                    style: GoogleFonts.nunito(
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        tooltip: 'Log out',
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 16, color: Color(0xFFD89E00)),
+                      const SizedBox(width: 4),
+                      Text(
+                        city,
+                        style: GoogleFonts.nunito(
+                          textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Color(0xFFD89E00),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Text(
+                    currentDay.toUpperCase(),
+                    style: GoogleFonts.nunito(
+                      textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        temperature,
+                        style: GoogleFonts.nunito(
+                          textStyle: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                            fontSize: 48,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        _getWeatherIcon(weatherIcon),
+                        color: const Color(0xFFD89E00),
+                        size: 48,
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Humidity: $humidity',
+                        style: GoogleFonts.nunito(
+                          textStyle: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      Text(
+                        'UV Index: $uvIndex',
+                        style: GoogleFonts.nunito(
+                          textStyle: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ..._buildWarnings(),
+                _buildWaterTracker(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Card(
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.health_and_safety,
+                                color: Color(0xFFD89E00),
+                                size: 24,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Health Advice',
+                                style: GoogleFonts.nunito(
+                                  textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          _isLoadingAdvice
+                              ? const Center(child: CircularProgressIndicator())
+                              : _adviceList.isEmpty
+                              ? Text(
+                            'No advice generated yet',
+                            style: GoogleFonts.nunito(
+                              textStyle: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          )
+                              : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: _adviceList
+                                .map((advice) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4.0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '•',
+                                    style: GoogleFonts.nunito(
+                                      textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: const Color(0xFFD89E00),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      advice,
+                                      style: GoogleFonts.nunito(
+                                        textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ))
+                                .toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ),
