@@ -10,16 +10,17 @@ dependencies:
   flutter:
     sdk: flutter
   google_fonts: ^6.2.1
-  geolocator: ^9.0.2
+  geolocator: ^13.0.4
   http: ^1.2.2
   shared_preferences: ^2.2.0
   cupertino_icons: ^1.0.8
-  intl: ^0.18.0
+  intl: ^0.20.2
 
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
