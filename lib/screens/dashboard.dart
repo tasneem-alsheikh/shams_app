@@ -390,54 +390,119 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Future<void> _generatePersonalizedAdvice() async {
-    setState(() => _isLoadingAdvice = true);
+ Future<String> _fetchCDCContent(SharedPreferences prefs) async {
+    final List<String> userConditions =
+        prefs.getStringList('illnesses')?.map((e) => e.toLowerCase()).toList() ?? [];
+    final List<String> userMedications =
+        prefs.getStringList('medications')?.map((e) => e.toLowerCase()).toList() ?? [];
+    final String ageStr = prefs.getString('age') ?? '';
+    final int age = int.tryParse(ageStr) ?? 0;
 
-    final prefs = await SharedPreferences.getInstance();
-    final userData = {
-      'gender': prefs.getString('gender') ?? 'Not specified',
-      'age': prefs.getString('age') ?? 'Unknown',
-      'weight': prefs.getString('weight') ?? 'Unknown',
-      'illnesses': prefs.getStringList('illnesses')?.join(", ") ?? "None",
-      'medications': prefs.getStringList('medications')?.join(", ") ?? "None",
-      'currentWeather': {
-        'temperature': temperature,
-        'uvIndex': uvIndex,
-        'humidity': humidity,
-      },
+    // Map user condition keywords to CDC URLs
+    final conditionUrlMap = {
+      'heart disease': 'https://www.cdc.gov/heat-health/hcp/toolkits/toolkit-for-people-with-heart-disease.html',
+      'asthma': 'https://www.cdc.gov/heat-health/hcp/toolkits/tips-and-action-plans-for-children-with-asthma.html',
+      'pregnancy': 'https://www.cdc.gov/heat-health/risk-factors/heat-and-pregnancy.html',
+      'chronic conditions': 'https://www.cdc.gov/heat-health/risk-factors/heat-and-chronic-conditions.html',
+      'older adults': 'https://www.cdc.gov/heat-health/risk-factors/heat-and-older-adults-aged-65.html',
+      'children': 'https://www.cdc.gov/heat-health/risk-factors/infants-and-children.html',
+      'medications': 'https://www.cdc.gov/heat-health/hcp/clinical-guidance/heat-and-medications-guidance-for-clinicians.html',
     };
 
-    final prompt = """
-  Generate 3 concise health recommendations for:
-  
-  **User Profile:**
-  - Gender: ${userData['gender']}
-  - Age: ${userData['age']}
-  - Conditions: ${userData['illnesses']}
-  - Medications: ${userData['medications']}
-  
-  **Current Weather:**
-  - Temp: ${(userData['currentWeather'] as Map)['temperature'] ?? 'N/A'}°C
-  - UV: ${(userData['currentWeather'] as Map)['uvIndex'] ?? 'N/A'}
-  - Humidity: ${(userData['currentWeather'] as Map)['humidity'] ?? 'N/A'}%
-  
-  Focus on weather interactions with health conditions.
-  Just Three simple, easy and straightforward advices. each in one or 2 lines
-  do not mention the reasoning behind the advice or explanation or why to take the advice.
-  Only mention specific advise such as the number of glasses of water to drink.
-  Do not mention the UV index, humidity, temperature, illnesses or Medications values in the advice.
-  Do not include numbers or numbering at the beginning of each advice.
-  """;
+    // Conditions that count as chronic
+    final chronicConditions = [
+      'stroke',
+      'strokes',
+      'copd',
+      'diabetes',
+      'thyroid disorders',
+      'epilepsy',
+      'parkinson’s disease',
+      'multiple sclerosis',
+      'lupus',
+      'vitiligo',
+      'psoriasis',
+      'chronic kidney disease',
+      'overweight',
+      'obesity',
+    ];
+
+    final heatSensitiveMedications = [
+      'diuretics',
+      'blood pressure medications',
+      'psychiatric medications',
+      'diabetes medications',
+      'neurological medications',
+      'allergy medications',
+      'hormonal medications',
+    ];
+
+    // Determine which URLs to include
+    final Set<String> matchedKeys = {};
+
+    for (final condition in userConditions) {
+      if (condition.contains('heart')) matchedKeys.add('heart disease');
+      if (condition.contains('asthma')) matchedKeys.add('asthma');
+      if (condition.contains('pregnan')) matchedKeys.add('pregnancy');
+      if (chronicConditions.contains(condition)) matchedKeys.add('chronic conditions');
+      if (condition.contains('child')) matchedKeys.add('children');
+    }
+
+    // Age-based rule
+    if (age >= 65) {
+      matchedKeys.add('older adults');
+    } else if (age <= 12) {
+      matchedKeys.add('children');
+    }
+
+    // Medication-based rule
+    if (userMedications.any((med) => heatSensitiveMedications.contains(med))) {
+      matchedKeys.add('medications');
+    }
+
+    // Build URL map for relevant keys only
+    final urls = {
+      for (var key in matchedKeys) key[0].toUpperCase() + key.substring(1): conditionUrlMap[key]!
+    };
+
+    final client = http.Client();
+    final buffer = StringBuffer();
 
     try {
-      _adviceList = await _callMistralAPI(prompt);
+      for (var entry in urls.entries) {
+        final response = await client.get(Uri.parse(entry.value));
+        if (response.statusCode == 200) {
+          final raw = response.body;
+
+          // Extract <main> content
+          final mainContentMatch = RegExp(r'<main[^>]*>(.*?)<\/main>', dotAll: true).firstMatch(raw);
+          String cleaned = mainContentMatch?.group(1) ?? raw;
+
+          // Strip tags & format bullets
+          cleaned = cleaned
+              .replaceAll(RegExp(r'<(script|style)[^>]*>.*?</\1>', dotAll: true), '')
+              .replaceAllMapped(RegExp(r'<li>(.*?)<\/li>', dotAll: true), (match) => '\n• ${match.group(1)}')
+              .replaceAll(RegExp(r'<[^>]+>'), ' ')
+              .replaceAll('&nbsp;', ' ')
+              .replaceAll(RegExp(r'\s{2,}'), ' ')
+              .trim();
+
+          buffer.writeln('### ${entry.key} Guidelines:\n');
+          buffer.writeln(cleaned.substring(0, cleaned.length > 1800 ? 1800 : cleaned.length));
+          buffer.writeln('\n\n');
+        }
+      }
+
+      return buffer.isEmpty ? 'No specific CDC guidance matched your health profile.' : buffer.toString();
     } catch (e) {
-      _adviceList = ['Failed to generate advice: $e'];
+      debugPrint('Error fetching CDC content: $e');
+      return 'CDC content unavailable';
     } finally {
-      setState(() => _isLoadingAdvice = false);
+      client.close();
     }
   }
 
+  // Updated API call function with RAG integration
   Future<List<String>> _callMistralAPI(String prompt) async {
     try {
       const apiKey = 'YTAPiykxZ7wbHFuCEwEyA4m2AacP7Y2p';
@@ -452,38 +517,89 @@ class _DashboardPageState extends State<DashboardPage> {
           'messages': [
             {
               'role': 'system',
-              'content': 'You are a medical assistant. Provide 3 concise bullet points without leading asterisks, bullets, or numbers.'
+              'content': '''You are a medical assistant. Follow these rules:
+            1. Base recommendations STRICTLY on CDC guidelines
+            2. Provide EXACTLY 5 bullet points
+            3. Each point must be 1-2 lines
+            4. No explanations or disclaimers
+            5. Make advice specific and actionable'''
             },
             {'role': 'user', 'content': prompt}
           ],
+          'temperature': 0.3, // Lower for more factual responses
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
-      final jsonResponse = jsonDecode(response.body);
-      final content = jsonResponse['choices']?[0]?['message']?['content'] as String?;
-
-      // Improved cleaning: remove all numbering, bullets, and extra characters
-      if (content == null || content.isEmpty) {
-        return ['Could not generate advice'];
-      }
-
-      List<String> adviceItems = content
-          .split('\n')
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      final content = data['choices']?[0]?['message']?['content'] as String? ?? '';
+      debugPrint('Mistral raw response: $content');
+      return content.split('\n')
           .where((line) => line.trim().isNotEmpty)
-          .map((line) {
-        // Remove numbering patterns like "1. ", "1) ", etc.
-        String cleaned = line.replaceAll(RegExp(r'^\d+[\.\)\-]\s*'), '');
-        // Remove bullet points and other markers
-        cleaned = cleaned.replaceAll(RegExp(r'^[\*\•\-\s]+'), '');
-        return cleaned.trim();
-      })
+          .where((line) => line.trim().isNotEmpty)
           .toList();
-
-      return adviceItems.isEmpty ? ['Could not generate advice'] : adviceItems;
     } catch (e) {
-      return ['Error: $e'];
+      debugPrint('API Error: $e');
+      return [
+        '1. Drink at least 8 glasses of water today',
+        '2. Avoid prolonged sun exposure between 10AM-4PM',
+        '3. Wear lightweight, loose-fitting clothing'
+      ];
     }
   }
+
+  // Updated advice generation with CDC context
+  Future<void> _generatePersonalizedAdvice() async {
+    setState(() => _isLoadingAdvice = true);
+
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final cdcContent = await _fetchCDCContent(prefs);
+
+      final userData = {
+        'age': prefs.getString('age') ?? 'Unknown',
+        'conditions': prefs.getStringList('illnesses')?.join(", ") ?? "None",
+        'medications': prefs.getStringList('medications')?.join(", ") ?? "None",
+        'weather': '$temperature, UV $uvIndex, $humidity% humidity'
+      };
+
+      final prompt = """
+      You are a health assistant.
+      
+      The following is content extractred directly from CDC heat-related illness pages. Use it to generate personalized advice.
+      
+      ### CDC Guidelines (Structured Snippets)
+      $cdcContent
+      
+      ### User Profile:
+      - Age: ${userData['age']}
+      - Conditions: ${userData['conditions']}
+      - Medications: ${userData['medications']}
+      - Current Weather: ${userData['weather']}
+      
+      ### Your Task:
+      Based strictly on CDC guidance above (so don't deviate from it) and considering the user's profile, return 5 concise, specific recommendations:
+      - 1–2 lines per bullet
+      - Actionable (e.g. exact quantity, time, or clothing advice)
+      - No explanation or disclaimers
+      - No mention of data values (e.g. "UV index" or "temperature")
+      - Must be medically sound and grounded in the guidelines
+      -Avoid general tips unless critical to conditon
+      """;
+
+      debugPrint(prompt);
+      _adviceList = await _callMistralAPI(prompt);
+    } catch (e) {
+      _adviceList = [
+        '1. Stay hydrated with water throughout the day',
+        '2. Limit outdoor activity during peak heat',
+        '3. Check on vulnerable individuals'
+      ];
+      debugPrint('Advice generation error: $e');
+    } finally {
+      setState(() => _isLoadingAdvice = false);
+    }
+  }
+  
 
   Future<void> _logout() async {
     try {
